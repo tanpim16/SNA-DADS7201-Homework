@@ -32,6 +32,14 @@ METRIC_LABELS = {
     "pagerank": "PageRank",
 }
 
+METRIC_DESC = {
+    "degree": "ใครโพสต์ลิงก์ออกเยอะที่สุด (hub)",
+    "betweenness": "ใครเป็นสะพานเชื่อมชุมชนที่แยกกันอยู่ (bridge)",
+    "closeness": "ใครเข้าถึงโดเมนอื่นในกลุ่มตัวเองได้เร็วที่สุด",
+    "eigenvector": "ใครถูกอ้างอิงโดยโดเมนสำคัญ (ค่าไม่ลู่เข้าในกราฟนี้ - ดูสาเหตุใน Analysis)",
+    "pagerank": "ใครถูกอ้างอิงจากแหล่งสำคัญที่สุด (authority)",
+}
+
 MODULARITY = 0.9054  # gds.louvain result on the imported demo graph (see ANALYSIS.md)
 
 
@@ -90,7 +98,7 @@ with st.sidebar:
 </span>
 <div style='border-top:1px solid #e2e8f0;margin:6px 0'></div>
 <b style='color:#dc2626'>เส้นสีแดง = Bridge</b><br>
-<span style='color:#64748b'>เอ็จที่เอาออกแล้วเครือข่ายจะขาดจากกัน</span>
+<span style='color:#64748b'>edgesที่เอาออกแล้วเครือข่ายจะขาดจากกัน</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -235,8 +243,8 @@ n_communities = len(set(nx.get_node_attributes(G, "community").values())) if n_d
 
 k1, k2, k3, k4 = st.columns(4)
 for col, val, label in [
-    (k1, n_domains, "Domains"), (k2, n_edges, "Hyperlinks"),
-    (k3, n_bridges, "Bridges"), (k4, n_communities, "Louvain communities"),
+    (k1, n_domains, "โดเมน (Domains)"), (k2, n_edges, "เส้นเชื่อม (Links)"),
+    (k3, n_bridges, "จุดเชื่อมสำคัญ (Bridges)"), (k4, n_communities, "กลุ่ม (Communities)"),
 ]:
     col.markdown(f"""
 <div class='metric-card'>
@@ -253,6 +261,11 @@ tab1, tab2, tab3, tab4 = st.tabs(
 )
 
 with tab1:
+    st.caption(
+        "🔵 วงกลมใหญ่ = PageRank สูง (ถูกอ้างอิงเยอะ) · 🎨 สีเดียวกัน = อยู่กลุ่ม Louvain "
+        "เดียวกัน · 🔴 เส้นแดง = Bridge (ตัดออกแล้วเครือข่ายจะขาดจากกัน) · ป้ายชื่อ = 20 "
+        "โดเมนที่ PageRank สูงสุด, ที่เหลือดูได้จากการ hover"
+    )
     fig = draw_network(G, layout_type)
     if fig:
         st.plotly_chart(fig, use_container_width=True)
@@ -260,6 +273,7 @@ with tab1:
         st.warning("No domains match the current filters.")
 
 with tab2:
+    st.caption("ตัวเลขดิบเบื้องหลังกราฟด้านบน: ค่า centrality ของแต่ละโดเมน และเส้นเชื่อมทั้งหมด (ติ๊ก is_bridge = จุดเชื่อมสำคัญ)")
     st.dataframe(
         fn.sort_values("pagerank", ascending=False),
         use_container_width=True, hide_index=True,
@@ -273,6 +287,10 @@ with tab2:
     st.dataframe(fe.sort_values("is_bridge", ascending=False), use_container_width=True, hide_index=True)
 
 with tab3:
+    st.caption(
+        "Top 10 ของแต่ละตัวชี้วัด (metric) — สังเกตว่าแต่ละอันชี้ไปที่โดเมนคนละกลุ่มกัน "
+        "เพราะแต่ละตัวมองเครือข่ายคนละมุม (สรุปเปรียบเทียบละเอียดใน tab Analysis)"
+    )
     col_a, col_b = st.columns(2)
 
     def top10_bar(metric, color):
@@ -284,12 +302,14 @@ with tab3:
             textfont=dict(color="#374151", size=10),
         ))
         fig.update_layout(
-            title=dict(text=f"<b>Top 10 by {METRIC_LABELS[metric]}</b>",
-                       font=dict(color="#1e293b", size=13)),
+            title=dict(
+                text=f"<b>Top 10 by {METRIC_LABELS[metric]}</b>"
+                     f"<br><sup style='color:#64748b'>{METRIC_DESC[metric]}</sup>",
+                font=dict(color="#1e293b", size=13)),
             paper_bgcolor="white", plot_bgcolor="#fafafa",
             xaxis=dict(color="#9ca3af", gridcolor="#f1f5f9"),
             yaxis=dict(color="#374151", tickfont=dict(size=10)),
-            height=360, margin=dict(l=10, r=60, t=45, b=20), showlegend=False,
+            height=380, margin=dict(l=10, r=60, t=60, b=20), showlegend=False,
         )
         return fig
 
@@ -301,10 +321,6 @@ with tab3:
         st.plotly_chart(top10_bar("degree", "#10b981"), use_container_width=True)
         st.plotly_chart(top10_bar("eigenvector", "#f59e0b"), use_container_width=True)
 
-        top_domain_per_community = (
-            nodes_df.sort_values("pagerank", ascending=False)
-            .groupby("community").first()["domain"]
-        )
         comm_labels = [
             f"C{c}: {top_domain_per_community[c]}" for c in community_sizes.index[:10]
         ]
@@ -315,17 +331,22 @@ with tab3:
             hole=0.4,
         ))
         comm_fig.update_layout(
-            title=dict(text="<b>Top 10 Louvain Communities (by size)</b>",
-                       font=dict(color="#1e293b", size=13)),
-            paper_bgcolor="white", height=360, margin=dict(l=10, r=10, t=45, b=20),
+            title=dict(
+                text="<b>Top 10 Louvain Communities</b>"
+                     "<br><sup style='color:#64748b'>กลุ่มโดเมนที่ตรวจพบอัตโนมัติ เรียงตามขนาด</sup>",
+                font=dict(color="#1e293b", size=13)),
+            paper_bgcolor="white", height=380, margin=dict(l=10, r=10, t=60, b=20),
         )
         st.plotly_chart(comm_fig, use_container_width=True)
 
     st.divider()
-    st.markdown(f"**Louvain modularity:** `{MODULARITY:.4f}` across **{len(community_sizes)}** communities "
-                f"(computed by `gds.louvain.write` on the full domain graph).")
+    st.markdown(
+        f"**Modularity `{MODULARITY:.4f}`** จาก **{len(community_sizes)} กลุ่ม** — ค่ายิ่งใกล้ 1 "
+        f"ยิ่งแปลว่ากราฟแบ่งเป็นกลุ่มชัดเจน (คำนวณจริงด้วย `gds.louvain.write`)"
+    )
 
 with tab4:
+    st.caption("สรุปผลการวิเคราะห์ทั้งหมด: แต่ละ metric ชี้อะไร และ Louvain เจอชุมชนแบบไหน")
     try:
         with open("ANALYSIS.md", encoding="utf-8") as f:
             st.markdown(f.read())
