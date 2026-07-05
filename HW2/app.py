@@ -46,13 +46,28 @@ nodes_df, edges_df = load_data()
 
 community_sizes = nodes_df.groupby("community").size().sort_values(ascending=False)
 top_community_ids = list(community_sizes.index)
+top_domain_per_community = (
+    nodes_df.sort_values("pagerank", ascending=False)
+    .groupby("community").first()["domain"]
+)
+
+
+def community_label(c):
+    if c == "All":
+        return "ทั้งหมด (All)"
+    cid = int(c)
+    return f"C{cid} · {top_domain_per_community[cid]} ({community_sizes[cid]} โดเมน)"
+
 
 # ── SESSION STATE / SIDEBAR ──────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("### 🔍 Filters")
     community_options = ["All"] + [str(c) for c in top_community_ids]
-    sel_community = st.selectbox("Louvain community", community_options)
+    sel_community = st.selectbox(
+        "Louvain community (กลุ่มที่ตรวจพบอัตโนมัติ)",
+        community_options, format_func=community_label,
+    )
     min_pagerank = st.slider("Min PageRank", 0.0, float(nodes_df["pagerank"].max()), 0.0, 0.05)
     only_bridges = st.checkbox("Show only bridge edges", value=False)
     layout_labels = {
@@ -186,6 +201,18 @@ def draw_network(G: nx.DiGraph, layout_type="spring"):
             showlegend=False,
         ))
 
+    # Always-on labels for the most important domains (by PageRank), so the
+    # graph reads as more than an unlabeled cloud of dots without cluttering
+    # every single node's text.
+    top_labeled = sorted(G.nodes, key=lambda n: -G.nodes[n]["pagerank"])[:20]
+    if top_labeled:
+        fig.add_trace(go.Scatter(
+            x=[pos[n][0] for n in top_labeled], y=[pos[n][1] for n in top_labeled],
+            mode="text", text=top_labeled, textposition="top center",
+            textfont=dict(size=9, color="#111827", family="Arial Black"),
+            hoverinfo="skip", showlegend=False,
+        ))
+
     fig.update_layout(
         showlegend=True, hovermode="closest",
         margin=dict(l=10, r=10, t=10, b=10),
@@ -274,8 +301,15 @@ with tab3:
         st.plotly_chart(top10_bar("degree", "#10b981"), use_container_width=True)
         st.plotly_chart(top10_bar("eigenvector", "#f59e0b"), use_container_width=True)
 
+        top_domain_per_community = (
+            nodes_df.sort_values("pagerank", ascending=False)
+            .groupby("community").first()["domain"]
+        )
+        comm_labels = [
+            f"C{c}: {top_domain_per_community[c]}" for c in community_sizes.index[:10]
+        ]
         comm_fig = go.Figure(go.Pie(
-            labels=[f"Community {c}" for c in community_sizes.index[:10]],
+            labels=comm_labels,
             values=community_sizes.values[:10],
             marker=dict(colors=[community_color(c) for c in community_sizes.index[:10]]),
             hole=0.4,

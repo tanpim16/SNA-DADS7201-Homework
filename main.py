@@ -72,12 +72,33 @@ if not homeworks:
 
 with st.sidebar:
     st.markdown("### 📚 เลือกงาน")
+    # Default to the highest-numbered HW folder (i.e. the most recently
+    # added homework) rather than always starting on HW1.
     selected_name = st.radio(
         "เลือกงาน",
         [name for name, _, _ in homeworks],
+        index=len(homeworks) - 1,
         label_visibility="collapsed",
     )
     st.divider()
+
+st.markdown(
+    """
+    <style>
+    .sidebar-credit {
+        position: fixed;
+        bottom: 14px;
+        left: 16px;
+        font-size: 0.72rem;
+        line-height: 1.5;
+        color: #94a3b8;
+        z-index: 999;
+    }
+    </style>
+    <div class="sidebar-credit">Pimkanit Thongsrikaew<br>6810422011</div>
+    """,
+    unsafe_allow_html=True,
+)
 
 selected_app_file = next(f for n, _, f in homeworks if n == selected_name)
 run_homework_app(selected_app_file)
